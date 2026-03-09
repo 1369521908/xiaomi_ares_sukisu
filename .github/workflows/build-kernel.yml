@@ -128,6 +128,8 @@ jobs:
           fi
           if [ "${{ inputs.enable_feature_susfs }}" = "true" ]; then
             cat $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append >> $GITHUB_WORKSPACE/kernel/arch/arm64/configs/ares_user_defconfig
+          else
+            echo "CONFIG_KSU_MANUAL_HOOK=y" >> $GITHUB_WORKSPACE/kernel/arch/arm64/configs/ares_user_defconfig
           fi
       
       - name: Build Kernel for K40GE
