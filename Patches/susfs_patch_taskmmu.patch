@@ -1,14 +1,14 @@
-From 7ede8363a31532938b66491fe03251c57542bd75 Mon Sep 17 00:00:00 2001
+From d58fc504e2fe0d7e45e314e4410bded2bc0bd7ce Mon Sep 17 00:00:00 2001
 From: MerCuJerry <mercujerry@gmail.com>
-Date: Sun, 4 Jan 2026 09:23:48 +0800
+Date: Mon, 9 Mar 2026 10:22:18 +0800
 Subject: [PATCH] susfs_patch_taskmmu
 
 ---
- fs/proc/task_mmu.c | 33 +++++++++++++++++++++++++++++++++
- 1 file changed, 33 insertions(+)
+ fs/proc/task_mmu.c | 39 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
 
 diff --git a/fs/proc/task_mmu.c b/fs/proc/task_mmu.c
-index 1cbbea1bcaae..6dd79e688b15 100644
+index c4fe90e4f499..3d672bd22901 100644
 --- a/fs/proc/task_mmu.c
 +++ b/fs/proc/task_mmu.c
 @@ -21,6 +21,9 @@
@@ -21,28 +21,31 @@ index 1cbbea1bcaae..6dd79e688b15 100644
  #include <asm/elf.h>
  #include <asm/tlb.h>
  #include <asm/tlbflush.h>
-@@ -876,6 +879,20 @@ static int show_smap(struct seq_file *m, void *v)
+@@ -879,6 +882,23 @@ static int show_smap(struct seq_file *m, void *v)
  		seq_print_vma_name(m, vma);
  		seq_putc(m, '\n');
  	}
 +#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+	if (vma->vm_file &&
-+		unlikely(file_inode(vma->vm_file)->i_mapping->flags & BIT_SUS_MAPS) &&
-+		susfs_is_current_proc_umounted())
-+	{
-+		seq_printf(m,
-+			"Size:           %8lu kB\n"
-+			"KernelPageSize: %8lu kB\n"
-+			"MMUPageSize:    %8lu kB\n",
-+			(vma->vm_end - vma->vm_start) >> 10,
-+			4, 4);
-+		goto bypass_orig_flow;
++	if (vma->vm_file) {
++		struct inode *inode = file_inode(vma->vm_file);
++		if (inode->i_mapping &&
++			unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_mapping->flags) &&
++			susfs_is_current_proc_umounted_app()))
++		{
++			seq_printf(m,
++				"Size:           %8lu kB\n"
++				"KernelPageSize: %8lu kB\n"
++				"MMUPageSize:    %8lu kB\n",
++				(vma->vm_end - vma->vm_start) >> 10,
++				4, 4);
++			goto bypass_orig_flow;
++		}
 +	}
 +#endif
  
  	seq_printf(m,
  		   "Size:           %8lu kB\n"
-@@ -885,11 +902,27 @@ static int show_smap(struct seq_file *m, void *v)
+@@ -888,11 +908,30 @@ static int show_smap(struct seq_file *m, void *v)
  		   vma_kernel_pagesize(vma) >> 10,
  		   vma_mmu_pagesize(vma) >> 10);
  
@@ -52,13 +55,16 @@ index 1cbbea1bcaae..6dd79e688b15 100644
  	__show_smap(m, &mss);
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MAP
-+	if (vma->vm_file &&
-+		unlikely(file_inode(vma->vm_file)->i_mapping->flags & BIT_SUS_MAPS) &&
-+		susfs_is_current_proc_umounted())
-+	{
-+		seq_puts(m, "VmFlags: mr mw me");
-+		seq_putc(m, '\n');
-+		goto bypass_orig_flow2;
++	if (vma->vm_file) {
++		struct inode *inode = file_inode(vma->vm_file);
++		if (inode->i_mapping &&
++			unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_mapping->flags) &&
++			susfs_is_current_proc_umounted_app()))
++		{
++			seq_puts(m, "VmFlags: mr mw me");
++			seq_putc(m, '\n');
++			goto bypass_orig_flow2;
++		}
 +	}
 +#endif
  	arch_show_smap(m, vma);
@@ -71,5 +77,5 @@ index 1cbbea1bcaae..6dd79e688b15 100644
  
  	return 0;
 -- 
-2.52.0
+2.53.0
 
