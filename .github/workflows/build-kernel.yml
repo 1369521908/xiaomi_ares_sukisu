@@ -3,8 +3,13 @@ name: Build Kernel
 on:
   workflow_dispatch:
     inputs:
+      enable_feature_susfs:
+        description: "是否启用susfs"
+        required: false
+        default: true
+        type: boolean
       enable_feature_kpm:
-        description: "是否启用kpm"
+        description: "是否启用kpm (需要开启susfs)"
         required: false
         default: false
         type: boolean
@@ -86,6 +91,7 @@ jobs:
           path: sukisu_patch
 
       - name: Get susfs patch
+        if: ${{ inputs.enable_feature_susfs }}
         uses: actions/checkout@v5
         with:
           repository: JackA1ltman/NonGKI_Kernel_Build_2nd
@@ -99,6 +105,7 @@ jobs:
           patch -p1 < $GITHUB_WORKSPACE/Patches/susfs-syscall-hooks.patch
 
       - name: Apply KernelPatch for SUSFS
+        if: ${{ inputs.enable_feature_susfs }}
         working-directory: kernel
         run: |
           patch -p1 < $GITHUB_WORKSPACE/susfs_patch/Patches/Patch/susfs_patch_to_4.14.patch || true
@@ -114,11 +121,14 @@ jobs:
 
       - name: Copy defconfig
         run: |
+          echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/kernel/arch/arm64/configs/ares_user_defconfig
           if [ "${{ inputs.enable_feature_kpm }}" = "true" ]; then
             echo "CONFIG_KALLSYMS_ALL=y" >> $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append
             echo "CONFIG_KPM=y" >> $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append
           fi
-          cat $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append >> $GITHUB_WORKSPACE/kernel/arch/arm64/configs/ares_user_defconfig
+          if [ "${{ inputs.enable_feature_susfs }}" = "true" ]; then
+            cat $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append >> $GITHUB_WORKSPACE/kernel/arch/arm64/configs/ares_user_defconfig
+          fi
       
       - name: Build Kernel for K40GE
         working-directory: kernel

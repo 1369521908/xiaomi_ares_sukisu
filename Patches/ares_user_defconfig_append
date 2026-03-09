@@ -1,6 +1,3 @@
-#KSU
-CONFIG_KSU=y
-
 # Add SUSFS configuration settings
 CONFIG_KSU_SUSFS=y
 CONFIG_KSU_SUSFS_SUS_PATH=y
