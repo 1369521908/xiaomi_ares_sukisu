@@ -1,21 +1,21 @@
-From 22c790c0ac8706cb11add716da4575e7fc803c01 Mon Sep 17 00:00:00 2001
+From f0edee94005f4d373e17a96262b50d2aa06eece0 Mon Sep 17 00:00:00 2001
 From: MerCuJerry <mercujerry@gmail.com>
-Date: Mon, 9 Mar 2026 10:58:40 +0800
-Subject: [PATCH] ksu
+Date: Tue, 10 Mar 2026 20:17:41 +0800
+Subject: [PATCH] susfs_inline_hooks
 
 ---
  drivers/input/input.c |  9 +++++++++
  fs/devpts/inode.c     | 16 ++++++++++++++++
- fs/exec.c             | 25 +++++++++++++++++++++++++
+ fs/exec.c             | 26 ++++++++++++++++++++++++++
  fs/open.c             | 20 ++++++++++++++++++++
  fs/read_write.c       |  9 +++++++++
  fs/stat.c             | 29 +++++++++++++++++++++++++++++
  kernel/reboot.c       | 11 +++++++++++
- kernel/sys.c          |  8 ++++++++
- 8 files changed, 127 insertions(+)
+ kernel/sys.c          |  6 ++++++
+ 8 files changed, 126 insertions(+)
 
 diff --git a/drivers/input/input.c b/drivers/input/input.c
-index f9f3d6261dc5..7e5f631f02a3 100644
+index f9f3d6261..7e5f631f0 100644
 --- a/drivers/input/input.c
 +++ b/drivers/input/input.c
 @@ -377,10 +377,19 @@ static int input_get_disposition(struct input_dev *dev,
@@ -39,7 +39,7 @@ index f9f3d6261dc5..7e5f631f02a3 100644
  	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
  		add_input_randomness(type, code, value);
 diff --git a/fs/devpts/inode.c b/fs/devpts/inode.c
-index 32f6f1c683d9..2c739c90d978 100644
+index 32f6f1c68..2c739c90d 100644
 --- a/fs/devpts/inode.c
 +++ b/fs/devpts/inode.c
 @@ -27,6 +27,9 @@
@@ -80,7 +80,7 @@ index 32f6f1c683d9..2c739c90d978 100644
  		return NULL;
  	return dentry->d_fsdata;
 diff --git a/fs/exec.c b/fs/exec.c
-index ae0a49517ba9..a2426a441298 100644
+index ae0a49517..472b982d3 100644
 --- a/fs/exec.c
 +++ b/fs/exec.c
 @@ -62,6 +62,9 @@
@@ -93,32 +93,33 @@ index ae0a49517ba9..a2426a441298 100644
  
  #include <linux/uaccess.h>
  #include <asm/mmu_context.h>
-@@ -1709,6 +1712,14 @@ static int exec_binprm(struct linux_binprm *bprm)
+@@ -1709,6 +1712,16 @@ static int exec_binprm(struct linux_binprm *bprm)
  /*
   * sys_execve() executes a new program.
   */
-+#ifdef CONFIG_KSU
++#ifdef CONFIG_KSU_SUSFS
 +extern bool ksu_execveat_hook __read_mostly;
++extern bool ksu_su_compat_enabled __read_mostly;
++extern bool susfs_is_sdcard_android_data_decrypted __read_mostly;
 +extern bool __ksu_is_allow_uid_for_current(uid_t uid);
 +extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 +			void *envp, int *flags);
-+extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
-+				 void *argv, void *envp, int *flags);
++extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
++				void *envp, int *flags);
 +#endif
  static int do_execveat_common(int fd, struct filename *filename,
  			      struct user_arg_ptr argv,
  			      struct user_arg_ptr envp,
-@@ -1723,6 +1734,20 @@ static int do_execveat_common(int fd, struct filename *filename,
+@@ -1723,6 +1736,19 @@ static int do_execveat_common(int fd, struct filename *filename,
  	if (IS_ERR(filename))
  		return PTR_ERR(filename);
  
 +#ifdef CONFIG_KSU_SUSFS
-+	if (likely(susfs_is_current_proc_umounted())) {
++	if (likely(susfs_is_current_proc_umounted()) || !ksu_su_compat_enabled) {
 +		goto orig_flow;
 +	}
-+#endif
-+#ifdef CONFIG_KSU
-+	if (unlikely(ksu_execveat_hook)) {
++
++	if (unlikely(ksu_execveat_hook || !susfs_is_sdcard_android_data_decrypted)) {
 +		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 +	} else if ((__ksu_is_allow_uid_for_current(current_uid().val))) {
 +		ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
@@ -130,7 +131,7 @@ index ae0a49517ba9..a2426a441298 100644
  	 * We move the actual failure in case of RLIMIT_NPROC excess from
  	 * set*uid() to execve() because too many poorly written programs
 diff --git a/fs/open.c b/fs/open.c
-index 3b62683fe332..a76cd53d0706 100644
+index 3b62683fe..5bc794d66 100644
 --- a/fs/open.c
 +++ b/fs/open.c
 @@ -31,6 +31,9 @@
@@ -143,39 +144,39 @@ index 3b62683fe332..a76cd53d0706 100644
  
  #include "internal.h"
  
-@@ -354,6 +357,11 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
+@@ -354,6 +357,12 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
  	return error;
  }
  
-+#ifdef CONFIG_KSU
++#ifdef CONFIG_KSU_SUSFS
++extern bool ksu_su_compat_enabled __read_mostly;
 +extern bool __ksu_is_allow_uid_for_current(uid_t uid);
 +extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
-+			 int *flags);
++			int *flags);
 +#endif
  /*
   * access() needs to use the real uid/gid, not the effective uid/gid.
   * We do this by temporarily clearing all FS-related capabilities and
-@@ -368,6 +376,18 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
- 	struct vfsmount *mnt;
+@@ -369,6 +378,17 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
  	int res;
  	unsigned int lookup_flags = LOOKUP_FOLLOW;
+ 
 +#ifdef CONFIG_KSU_SUSFS
-+	if (likely(susfs_is_current_proc_umounted())) {
++	if (likely(susfs_is_current_proc_umounted()) || !ksu_su_compat_enabled) {
 +		goto orig_flow;
 +	}
-+#endif
-+#ifdef CONFIG_KSU
++
 +	if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val))) {
 +		ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 +	}
 +
 +orig_flow:
 +#endif
- 
  	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
  		return -EINVAL;
+ 
 diff --git a/fs/read_write.c b/fs/read_write.c
-index 0da6e4f19d7f..44ad360fbe96 100644
+index 0da6e4f19..44ad360fb 100644
 --- a/fs/read_write.c
 +++ b/fs/read_write.c
 @@ -568,11 +568,20 @@ static inline void file_pos_write(struct file *file, loff_t pos)
@@ -200,7 +201,7 @@ index 0da6e4f19d7f..44ad360fbe96 100644
  		loff_t pos = file_pos_read(f.file);
  		ret = vfs_read(f.file, buf, count, &pos);
 diff --git a/fs/stat.c b/fs/stat.c
-index 0fda4b6b8fb2..cb2aeaa8b214 100644
+index 0fda4b6b8..406bbea63 100644
 --- a/fs/stat.c
 +++ b/fs/stat.c
 @@ -17,6 +17,9 @@
@@ -224,7 +225,7 @@ index 0fda4b6b8fb2..cb2aeaa8b214 100644
  int vfs_statx_fd(unsigned int fd, struct kstat *stat,
  		 u32 request_mask, unsigned int query_flags)
  {
-@@ -142,12 +149,22 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
+@@ -142,12 +149,23 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
  	if (f.file) {
  		error = vfs_getattr(&f.file->f_path, stat,
  				    request_mask, query_flags);
@@ -240,6 +241,7 @@ index 0fda4b6b8fb2..cb2aeaa8b214 100644
  EXPORT_SYMBOL(vfs_statx_fd);
  
 +#ifdef CONFIG_KSU
++extern bool ksu_su_compat_enabled __read_mostly;
 +extern bool __ksu_is_allow_uid_for_current(uid_t uid);
 +extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
 +#endif
@@ -247,27 +249,26 @@ index 0fda4b6b8fb2..cb2aeaa8b214 100644
  /**
   * vfs_statx - Get basic and extra attributes by filename
   * @dfd: A file descriptor representing the base dir for a relative filename
-@@ -169,6 +186,18 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
+@@ -169,6 +187,17 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
  	struct path path;
  	int error = -EINVAL;
  	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
-+	
 +#ifdef CONFIG_KSU_SUSFS
-+	if (likely(susfs_is_current_proc_umounted())) {
++	if (likely(susfs_is_current_proc_umounted()) || !ksu_su_compat_enabled) {
 +		goto orig_flow;
 +	}
-+#endif
-+#ifdef CONFIG_KSU
++
 +	if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val))) {
 +		ksu_handle_stat(&dfd, &filename, &flags);
 +	}
++
 +orig_flow:
 +#endif
  
  	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
  		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
 diff --git a/kernel/reboot.c b/kernel/reboot.c
-index eea91461e153..423d3cca41a0 100644
+index eea91461e..423d3cca4 100644
 --- a/kernel/reboot.c
 +++ b/kernel/reboot.c
 @@ -284,12 +284,23 @@ static DEFINE_MUTEX(reboot_mutex);
@@ -295,7 +296,7 @@ index eea91461e153..423d3cca41a0 100644
  	/* We only trust the superuser with rebooting the system. */
  	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
 diff --git a/kernel/sys.c b/kernel/sys.c
-index b4862260a924..39692b6712a4 100644
+index b4862260a..5f1a6616a 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
 @@ -598,6 +598,9 @@ SYSCALL_DEFINE1(setuid, uid_t, uid)
@@ -308,14 +309,12 @@ index b4862260a924..39692b6712a4 100644
  SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
  {
  	struct user_namespace *ns = current_user_ns();
-@@ -605,6 +608,11 @@ SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
+@@ -605,6 +608,9 @@ SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
  	struct cred *new;
  	int retval;
  	kuid_t kruid, keuid, ksuid;
 +#ifdef CONFIG_KSU
-+	if (ksu_handle_setresuid(ruid, euid, suid)) {
-+		pr_info("Something wrong with ksu_handle_setresuid()\n");
-+	}
++	(void)ksu_handle_setresuid(ruid, euid, suid);
 +#endif
  
  	kruid = make_kuid(ns, ruid);
