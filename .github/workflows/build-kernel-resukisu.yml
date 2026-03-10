@@ -102,7 +102,7 @@ jobs:
       - name: Patch Kernel
         working-directory: kernel
         run: |
-          patch -p1 < $GITHUB_WORKSPACE/Patches/susfs-syscall-hooks.patch
+          patch -p1 < $GITHUB_WORKSPACE/Patches/resukisu-scopemin-hooks.patch
 
       - name: Apply KernelPatch for SUSFS
         if: ${{ inputs.enable_feature_susfs }}
@@ -160,20 +160,20 @@ jobs:
             chmod +x magiskboot
             ./magiskboot unpack boot.img
             cp $GITHUB_WORKSPACE/kernel/out/arch/arm64/boot/Image ./kernel
-            ./magiskboot repack boot.img boot_SukiSU_${{ env.KSUVER }}.img
+            ./magiskboot repack boot.img boot_ReSukiSU_${{ env.KSUVER }}.img
             cp $GITHUB_WORKSPACE/kernel/out/arch/arm64/boot/dtb ./dtb
-            ./magiskboot repack boot.img boot_SukiSU_${{ env.KSUVER }}_new_dtb.img
+            ./magiskboot repack boot.img boot_ReSukiSU_${{ env.KSUVER }}_new_dtb.img
 
       - name: Upload repacked boot image
         uses: actions/upload-artifact@v4
         with:
           name: K40GE_SukiSU_${{ env.KSUVER }}
-          path: Magiskboot/boot_SukiSU_${{ env.KSUVER }}.img
+          path: Magiskboot/boot_ReSukiSU_${{ env.KSUVER }}.img
           compression-level: 9
       
       - name: Upload repacked boot image with new dtb
         uses: actions/upload-artifact@v4
         with:
           name: K40GE_SukiSU_${{ env.KSUVER }}_new_dtb
-          path: Magiskboot/boot_SukiSU_${{ env.KSUVER }}_new_dtb.img
+          path: Magiskboot/boot_ReSukiSU_${{ env.KSUVER }}_new_dtb.img
           compression-level: 9
